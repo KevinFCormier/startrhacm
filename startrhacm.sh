@@ -120,6 +120,8 @@ if [[ -n "${CLUSTERCLAIM_END_TIME}" ]]; then
 fi
 ./apply.sh
 printlog title "Setting KUBECONFIG and checking cluster access"
+# Save the current KUBECONFIG in case we need it
+PREVIOUS_KUBECONFIG=${KUBECONFIG}
 # If we have a ClusterClaim name, use that to get the kubeconfig, otherwise just get the most recently modified (which is most likely the one we need)
 if [[ -n "${CLUSTERCLAIM_NAME}" ]]; then
   export KUBECONFIG=$(ls ${CLAIM_DIR}/${CLUSTERCLAIM_NAME}/kubeconfig)
@@ -148,7 +150,7 @@ printlog title "Getting snapshot for RHACM (defaults to latest version -- overri
 cd ${RHACM_PIPELINE_PATH}
 git pull &>/dev/null
 RHACM_BRANCH=${RHACM_BRANCH:-$(echo "${RHACM_VERSION}" | grep -o "[[:digit:]]\+\.[[:digit:]]\+" || true)} # Create Pipeline branch from version, if specified
-BRANCH=${RHACM_BRANCH:-$(git remote show origin | grep -o " [0-9]\+\.[0-9]\+-" | sort -uV | tail -1 | grep -o "[0-9]\+\.[0-9]\+")}
+BRANCH=${RHACM_BRANCH:-$(git remote show origin | grep -o " [0-8]\+\.[0-9]\+-" | sort -uV | tail -1 | grep -o "[0-9]\+\.[0-9]\+")}
 
 # Get latest downstream snapshot from Quay if DOWNSTREAM is set to "true"
 if [[ "${DOWNSTREAM}" == "true" ]]; then
@@ -186,7 +188,7 @@ else
     if (! ls ${RHACM_PIPELINE_PATH}/snapshots/manifest-* &>/dev/null); then
       printlog error "The branch, ${BRANCH}-${PIPELINE_PHASE}, doesn't appear to have any snapshots/manifest-* files to parse a snapshot from."
       if [[ -z "${RHACM_BRANCH}" ]]; then
-        BRANCH=${RHACM_BRANCH:-$(git remote show origin | grep -o " [0-9]\+\.[0-9]\+-" | sort -uV | tail -2 | head -1 | grep -o "[0-9]\+\.[0-9]\+")}
+        BRANCH=${RHACM_BRANCH:-$(git remote show origin | grep -o " [0-8]\+\.[0-9]\+-" | sort -uV | tail -2 | head -1 | grep -o "[0-9]\+\.[0-9]\+")}
         printlog info "RHACM_BRANCH was not set. Using an older branch: ${BRANCH}-${PIPELINE_PHASE}"
         git checkout ${BRANCH}-${PIPELINE_PHASE} &>/dev/null
         git pull &>/dev/null
@@ -306,6 +308,13 @@ if [[ -n "${AUTH_REDIRECT_PATHS}" ]]; then
     oc patch oauthclient multicloudingress --patch "{\"redirectURIs\":[${REDIRECT_PATH_LIST}]}"
     printlog info "Ingress patched with: ${REDIRECT_PATH_LIST}"
   fi
+fi
+
+# Set ClusterPool to target size post-deployment
+if [[ -n "${CLUSTERPOOL_POST_DEPLOY_SIZE}" ]]; then
+  printlog info "Scaling ClusterPool ${CLUSTERPOOL_NAME} to ${CLUSTERPOOL_POST_DEPLOY_SIZE}"
+  export KUBECONFIG=${PREVIOUS_KUBECONFIG}
+  oc scale clusterpool.hive ${CLUSTERPOOL_NAME} -n ${CLUSTERPOOL_TARGET_NAMESPACE} --replicas=${CLUSTERPOOL_POST_DEPLOY_SIZE}
 fi
 
 printlog title "Information for claimed RHACM cluster (Note: RHACM may be completing final installation steps):"
