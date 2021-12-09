@@ -265,7 +265,7 @@ MAX_ATTEMPTS=1
 INTERVAL=30
 FAILED="false"
 export TARGET_NAMESPACE=${TARGET_NAMESPACE:-"open-cluster-management"}
-while (! ./start.sh --silent) && FAILED="true" && (( ATTEMPTS != MAX_ATTEMPTS )); do
+while (! ./start.sh --silent --search) && FAILED="true" && (( ATTEMPTS != MAX_ATTEMPTS )); do
   printlog error "RHACM deployment failed. Trying again in ${INTERVAL}s (Retry $((++ATTEMPTS))/${MAX_ATTEMPTS})"
   sleep ${INTERVAL}
   FAILED="false"
